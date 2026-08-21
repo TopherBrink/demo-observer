@@ -14,6 +14,9 @@
     </edit-config>
     <platform name="android">
         <preference name="AndroidXEnabled" value="true" />
+        <!-- Страница живёт на https://localhost (cordova-android 10+), а коллектор/API — на http:// в локальной сети.
+             Без этого WebView блокирует такие запросы как mixed content: MIXED_CONTENT_ALWAYS_ALLOW = 0. -->
+        <preference name="MixedContentMode" value="0" />
         <allow-intent href="market:*" />
     </platform>
     <allow-navigation href="about:*" />
