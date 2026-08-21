@@ -51,7 +51,8 @@
   .row { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
   .issue { color: var(--warn); }
   .empty { color: var(--muted); padding: 40px 0; text-align: center; }
-  #player { margin-top: 12px; }
+  #player { margin-top: 12px; display: none; }
+  #player.visible { display: block; }
 </style>
 </head>
 <body>
@@ -84,7 +85,7 @@ async function load() {
         ${s.contracts ? `· <span style="color:var(--warn)">${s.contracts} контракт</span>` : ''}
         ${s.replays ? `· ${s.replays} записей` : ''}
       </div>
-      <div class="meta">${s.device?.webview?.engine || '—'} ${s.device?.webview?.version || ''}</div>
+      <div class="meta">${deviceLabel(s.device)}</div>
     </div>`).join('') || '<div class="meta">Пока пусто. Откройте приложение.</div>'
 }
 
@@ -92,12 +93,21 @@ async function reset() {
   await fetch('/api/reset', { method: 'POST' })
   current = null
   document.getElementById('detail').innerHTML = '<div class="empty">Очищено</div>'
-  document.getElementById('player').innerHTML = ''
+  hidePlayer()
   load()
+}
+
+function hidePlayer() {
+  const host = document.getElementById('player')
+  host.classList.remove('visible')
+  host.innerHTML = ''
 }
 
 async function open_(id) {
   current = id
+  // Плеер держит запись ПРЕДЫДУЩЕЙ сессии — если её не убрать, можно
+  // упустить, что сейчас смотришь на старую запись, а не на новую сессию.
+  hidePlayer()
   load()
   const data = await (await fetch(`/api/sessions/${id}`)).json()
   const ctx = data.events.at(-1)?.ctx || {}
@@ -105,7 +115,8 @@ async function open_(id) {
   const head = `
     <div class="row">
       <strong>${id}</strong>
-      <span class="meta">${ctx.release || ''} · ${ctx.webview?.engine || ''} ${ctx.webview?.version || ''}
+      <span class="meta">${ctx.release || ''} · ${deviceLabel(ctx)}
+      · ${ctx.webview?.engine || ''} ${ctx.webview?.version || ''}
       · ${ctx.screen || ''} · память ${ctx.memoryGb ?? '?'} ГБ · ядер ${ctx.cores ?? '?'}</span>
     </div>
     <div class="row">
@@ -149,15 +160,50 @@ function renderEvent(e) {
   </div>`
 }
 
+/**
+ * rrweb инлайнит текст стилей при записи, но не сами ресурсы: @font-face
+ * Material Icons в снапшоте так и указывает на origin приложения
+ * (localhost:9000 или https://localhost в Cordova), а плеер открыт на
+ * origin коллектора. Итог без этой правки — иконки в записи выглядят как
+ * голый текст ("close", "bug_report"), потому что лигатурный шрифт
+ * физически не может догрузиться с чужого адреса. Чиним подменой url()
+ * на копию шрифта, которую раздаёт сам коллектор (public/fonts/).
+ */
+const FONT_URL_RE = /https?:\/\/[^"')\s]*?material-icons\/web-font\/[^"')\s]*?\.woff2?/g
+
+function fixFontUrls(value) {
+  if (typeof value === 'string') {
+    return value.includes('material-icons/web-font')
+      ? value.replace(FONT_URL_RE, '/fonts/material-icons.woff2')
+      : value
+  }
+  if (Array.isArray(value)) return value.map(fixFontUrls)
+  if (value && typeof value === 'object') {
+    const out = {}
+    for (const k in value) out[k] = fixFontUrls(value[k])
+    return out
+  }
+  return value
+}
+
 async function play(sessionId, replayId) {
   const replay = await (await fetch(`/api/sessions/${sessionId}?replay=${replayId}`)).json()
   const host = document.getElementById('player')
   host.innerHTML = ''
+  host.classList.add('visible')
   new rrwebPlayer.Player({
     target: host,
-    props: { events: replay.events, width: 420, height: 780, autoPlay: true, showController: true },
+    props: { events: fixFontUrls(replay.events), width: 420, height: 780, autoPlay: true, showController: true },
   })
   host.scrollIntoView({ behavior: 'smooth' })
+}
+
+function deviceLabel(ctx) {
+  const d = ctx?.device
+  if (!d || (!d.model && !d.manufacturer)) return ctx?.webview?.engine ? `браузер · ${ctx.webview.engine} ${ctx.webview.version || ''}` : '—'
+  const name = [d.manufacturer, d.model].filter(Boolean).join(' ')
+  const os = d.osVersion ? `Android ${d.osVersion}` : d.platform || ''
+  return [name, os, d.isVirtual ? 'эмулятор' : ''].filter(Boolean).join(' · ')
 }
 
 const rest = ({ ts, kind, ...r }) => r

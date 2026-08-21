@@ -8,7 +8,9 @@
     </q-header>
 
     <q-page-container>
-      <router-view />
+      <q-pull-to-refresh @refresh="onPullRefresh" mouse>
+        <router-view />
+      </q-pull-to-refresh>
     </q-page-container>
 
     <DevPanel />
@@ -18,6 +20,14 @@
 <script setup>
 import DevPanel from 'components/DevPanel.vue'
 import { config } from '../observability/flags'
+import { requestRefetch } from '../observability/refetch'
 
 const release = config.release
+
+// На странице без сетевых данных (например, в корзине) подписчиков нет —
+// requestRefetch() тогда разрешается сразу, и жест просто аккуратно схлопнется.
+async function onPullRefresh(done) {
+  await requestRefetch()
+  done()
+}
 </script>

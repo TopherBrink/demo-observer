@@ -33,6 +33,27 @@ function parseWebViewVersion(ua) {
   return { engine: 'unknown', version: null }
 }
 
+/**
+ * cordova-plugin-device — не UA-эвристика, а то, что реально сказала ОС:
+ * модель, производитель, версия Android. Появляется только после
+ * deviceready, поэтому до него device будет null — это нормально, событий
+ * настолько рано в жизни сессии почти не бывает.
+ *
+ * Намеренно НЕ берём device.uuid: это устойчивый идентификатор устройства,
+ * а не диагностика — ему нечего делать в отчёте об ошибке.
+ */
+function deviceContext() {
+  const d = globalThis.device
+  if (!d) return null
+  return {
+    platform: d.platform || null,
+    osVersion: d.version || null,
+    model: d.model || null,
+    manufacturer: d.manufacturer || null,
+    isVirtual: d.isVirtual ?? null,
+  }
+}
+
 export function baseContext() {
   const ua = navigator.userAgent
   return {
@@ -41,6 +62,7 @@ export function baseContext() {
     url: location.href,
     origin: location.origin, // https://localhost в cordova-android 10+
     webview: parseWebViewVersion(ua),
+    device: deviceContext(),
     screen: `${screen.width}x${screen.height}@${devicePixelRatio}`,
     lang: navigator.language,
     online: navigator.onLine,

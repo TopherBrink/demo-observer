@@ -139,6 +139,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { flags, config, resetEndpoints } from '../observability/flags'
 import { stats, onEvent } from '../observability/transport'
 import { flushReplay, replayStatus } from '../observability/replay'
+import { requestRefetch } from '../observability/refetch'
 
 const open = ref(false)
 const recent = ref([])
@@ -164,6 +165,9 @@ onUnmounted(() => {
 
 async function setBroken(mode) {
   await fetch(`${config.apiUrl}/api/admin/mode?value=${mode}`, { method: 'POST' })
+  // Иначе смена режима не видна, пока кто-нибудь не дёрнет каталог руками —
+  // а на сцене руки заняты микрофоном.
+  await requestRefetch()
 }
 
 const boom = () => {

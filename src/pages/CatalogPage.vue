@@ -48,9 +48,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { fetchProducts } from '../api/catalog'
 import { addToCart, count } from '../stores/cart'
+import { onRefetch } from '../observability/refetch'
 
 const products = ref([])
 const issues = ref([])
@@ -59,7 +60,8 @@ const loading = ref(true)
 
 const formatPrice = (value) => `${value} ₽`
 
-onMounted(async () => {
+async function load() {
+  loading.value = true
   try {
     const result = await fetchProducts()
     products.value = result.products
@@ -68,5 +70,12 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+}
+
+let unsubscribe
+onMounted(() => {
+  load()
+  unsubscribe = onRefetch(load)
 })
+onUnmounted(() => unsubscribe?.())
 </script>

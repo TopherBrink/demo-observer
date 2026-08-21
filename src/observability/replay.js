@@ -44,6 +44,10 @@ export async function startReplay() {
     maskTextClass: 'obs-mask',
     blockClass: 'obs-block',
     recordCanvas: false,
+    // collectFonts у rrweb ловит только шрифты, зарегистрированные через JS
+    // FontFace API — Material Icons подключён обычным CSS @font-face, так что
+    // эта опция тут ничего не даёт. Проблема "иконки в плеере — это текст"
+    // решена на стороне дашборда: см. play() в collector/public/index.html.
     collectFonts: false,
     sampling: {
       // Движения мыши/пальца прореживаем: их тысячи, ценности мало
