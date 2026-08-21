@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Наблюдаемость — разбор сессий</title>
+<!-- rrweb-player подтягивается с CDN. Если демо показывается без интернета,
+     скачайте файлы заранее и положите рядом. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/rrweb-player@2.1.1/dist/style.css" />
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f26;
+    --line: #2b303b;
+    --text: #e6e8ec;
+    --muted: #8b93a3;
+    --error: #ff6b6b;
+    --warn: #ffb454;
+    --ok: #5ec26a;
+    --accent: #7aa2f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    display: grid; grid-template-columns: 280px 1fr; height: 100vh;
+  }
+  aside { border-right: 1px solid var(--line); overflow-y: auto; padding: 12px; }
+  main { overflow-y: auto; padding: 16px 20px; }
+  h1 { font-size: 15px; margin: 0 0 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  .session { padding: 10px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 8px; cursor: pointer; }
+  .session:hover { border-color: var(--accent); }
+  .session.active { border-color: var(--accent); background: var(--panel); }
+  .meta { color: var(--muted); font-size: 12px; }
+  .tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 11px; margin-right: 6px; }
+  .t-error { background: rgba(255,107,107,.15); color: var(--error); }
+  .t-contract { background: rgba(255,180,84,.15); color: var(--warn); }
+  .t-network { background: rgba(122,162,247,.15); color: var(--accent); }
+  .t-native, .t-session { background: rgba(139,147,163,.15); color: var(--muted); }
+  .event { border-left: 2px solid var(--line); padding: 8px 0 8px 12px; margin-left: 4px; }
+  .event.level-error { border-left-color: var(--error); }
+  .event.level-warning { border-left-color: var(--warn); }
+  .time { color: var(--muted); font-size: 12px; }
+  pre { background: var(--panel); padding: 10px; border-radius: 6px; overflow-x: auto; margin: 6px 0 0; font-size: 12px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  button {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 5px; padding: 6px 12px; cursor: pointer; font: inherit; font-size: 12px;
+  }
+  button:hover { border-color: var(--accent); }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .issue { color: var(--warn); }
+  .empty { color: var(--muted); padding: 40px 0; text-align: center; }
+  #player { margin-top: 12px; }
+</style>
+</head>
+<body>
+<aside>
+  <h1>Сессии</h1>
+  <div class="row">
+    <button onclick="load()">Обновить</button>
+    <button onclick="reset()">Очистить</button>
+  </div>
+  <div id="sessions"></div>
+</aside>
+
+<main>
+  <div id="detail"><div class="empty">Выберите сессию слева</div></div>
+  <div id="player"></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/rrweb-player@2.1.1/umd/rrweb-player.min.js"></script>
+<script>
+let current = null
+
+async function load() {
+  const list = await (await fetch('/api/sessions')).json()
+  document.getElementById('sessions').innerHTML = list.map(s => `
+    <div class="session ${s.id === current ? 'active' : ''}" onclick="open_('${s.id}')">
+      <div>${s.id}</div>
+      <div class="meta">
+        ${s.events} событий
+        ${s.errors ? `· <span style="color:var(--error)">${s.errors} ошибок</span>` : ''}
+        ${s.contracts ? `· <span style="color:var(--warn)">${s.contracts} контракт</span>` : ''}
+        ${s.replays ? `· ${s.replays} записей` : ''}
+      </div>
+      <div class="meta">${s.device?.webview?.engine || '—'} ${s.device?.webview?.version || ''}</div>
+    </div>`).join('') || '<div class="meta">Пока пусто. Откройте приложение.</div>'
+}
+
+async function reset() {
+  await fetch('/api/reset', { method: 'POST' })
+  current = null
+  document.getElementById('detail').innerHTML = '<div class="empty">Очищено</div>'
+  document.getElementById('player').innerHTML = ''
+  load()
+}
+
+async function open_(id) {
+  current = id
+  load()
+  const data = await (await fetch(`/api/sessions/${id}`)).json()
+  const ctx = data.events.at(-1)?.ctx || {}
+
+  const head = `
+    <div class="row">
+      <strong>${id}</strong>
+      <span class="meta">${ctx.release || ''} · ${ctx.webview?.engine || ''} ${ctx.webview?.version || ''}
+      · ${ctx.screen || ''} · память ${ctx.memoryGb ?? '?'} ГБ · ядер ${ctx.cores ?? '?'}</span>
+    </div>
+    <div class="row">
+      ${data.replays.map(r => `<button onclick="play('${id}','${r.id}')">
+        ▶ запись (${r.reason}, ${r.count} событий)</button>`).join('') || '<span class="meta">записей сессии нет</span>'}
+    </div>`
+
+  const events = data.events.slice().reverse().map(renderEvent).join('')
+  document.getElementById('detail').innerHTML = head + events
+}
+
+function renderEvent(e) {
+  const time = new Date(e.ts).toLocaleTimeString('ru-RU')
+  const p = e.payload || {}
+  let body = ''
+
+  if (e.type === 'network') {
+    body = `<div>${p.method} ${p.url} → <b>${p.status}</b> за ${p.durationMs} мс
+      ${p.traceId ? `<span class="meta">trace ${p.traceId.slice(0, 12)}…</span>` : ''}</div>
+      ${p.responseBody ? `<details><summary>тело ответа</summary><pre>${escape_(p.responseBody)}</pre></details>` : ''}`
+  } else if (e.type === 'contract') {
+    body = `<div><b>${p.endpoint}</b> — расхождений: ${p.issues.length}
+      ${p.repaired ? '<span class="meta">(данные починены на лету)</span>' : ''}</div>
+      ${p.issues.map(i => `<div class="issue">· ${i.path}: ждали ${i.expected}, пришло ${i.received} → ${escape_(String(i.actual))}</div>`).join('')}
+      <details><summary>сырой ответ</summary><pre>${escape_(p.raw)}</pre></details>`
+  } else if (e.type === 'error') {
+    body = `<div><b>${escape_(p.message || '')}</b> <span class="meta">${p.kind}</span></div>
+      ${p.source ? `<div class="meta">${escape_(p.source)} ${p.position || ''}</div>` : ''}
+      ${p.stack ? `<details><summary>стек</summary><pre>${escape_(p.stack)}</pre></details>` : ''}
+      ${p.breadcrumbs?.length ? `<details><summary>что было до (${p.breadcrumbs.length})</summary><pre>${
+        p.breadcrumbs.slice(-15).map(b =>
+          `${new Date(b.ts).toLocaleTimeString('ru-RU')}  ${b.kind}  ${escape_(JSON.stringify(rest(b)))}`
+        ).join('\n')}</pre></details>` : ''}`
+  } else {
+    body = `<pre>${escape_(JSON.stringify(p, null, 2))}</pre>`
+  }
+
+  return `<div class="event level-${e.level}">
+    <span class="tag t-${e.type}">${e.type}</span><span class="time">${time}</span>
+    ${body}
+  </div>`
+}
+
+async function play(sessionId, replayId) {
+  const replay = await (await fetch(`/api/sessions/${sessionId}?replay=${replayId}`)).json()
+  const host = document.getElementById('player')
+  host.innerHTML = ''
+  new rrwebPlayer.Player({
+    target: host,
+    props: { events: replay.events, width: 420, height: 780, autoPlay: true, showController: true },
+  })
+  host.scrollIntoView({ behavior: 'smooth' })
+}
+
+const rest = ({ ts, kind, ...r }) => r
+const escape_ = (s) => String(s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))
+
+load()
+setInterval(() => { if (!document.hidden) load() }, 4000)
+</script>
+</body>
+</html>
