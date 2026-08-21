@@ -39,6 +39,42 @@
         <q-separator />
 
         <q-card-section>
+          <div class="text-subtitle2 q-mb-sm">Адрес коллектора / API</div>
+          <q-input
+            v-model="config.collectorUrl"
+            dense
+            outlined
+            label="URL коллектора"
+            placeholder="http://192.168.1.114:8787"
+            class="q-mb-sm"
+          />
+          <q-input
+            v-model="config.apiUrl"
+            dense
+            outlined
+            label="URL API"
+            placeholder="http://192.168.1.114:8787"
+          />
+          <div class="row items-center justify-between q-mt-xs">
+            <div class="text-caption text-grey-7">
+              Меняется на лету, без пересборки — на случай, если IP машины на месте
+              показа окажется другим. Сохраняется в этом устройстве.
+            </div>
+          </div>
+          <q-btn
+            flat
+            dense
+            size="sm"
+            no-caps
+            label="сбросить к значению из сборки"
+            class="q-mt-xs"
+            @click="resetEndpoints"
+          />
+        </q-card-section>
+
+        <q-separator />
+
+        <q-card-section>
           <div class="text-subtitle2 q-mb-sm">Сломать бэкенд</div>
           <q-btn-toggle
             v-model="brokenMode"
@@ -100,7 +136,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { flags, config } from '../observability/flags'
+import { flags, config, resetEndpoints } from '../observability/flags'
 import { stats, onEvent } from '../observability/transport'
 import { flushReplay, replayStatus } from '../observability/replay'
 

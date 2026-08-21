@@ -10,14 +10,19 @@
     <meta name="viewport" content="user-scalable=no, initial-scale=1, maximum-scale=1, minimum-scale=1, width=device-width<% if (ctx.mode.cordova || ctx.mode.capacitor) { %>, viewport-fit=cover<% } %>">
     <!--
       Домен коллектора (VITE_COLLECTOR_URL / VITE_API_URL) должен быть в connect-src,
-      иначе запросы туда молча блокируются — см. README, раздел "CSP".
-      CSP не понимает CIDR/wildcard для IP, поэтому для реального устройства
-      здесь захардожен конкретный IP машины в LAN на день сборки. Сменили
-      сеть/машину — поменяйте его тут же (и в .env.cordova).
+      иначе запросы туда молча блокируются — см. README, раздел "CSP". CSP нельзя
+      поменять из JS в рантайме (метатег не переоткрывает политику задним числом),
+      а IP коллектора теперь редактируется прямо в панели докладчика без пересборки
+      (см. DevPanel.vue) — поэтому единственный вариант, который это не сломает,
+      это разрешить сам http-протокол, а не один конкретный адрес. CSP не понимает
+      CIDR/wildcard для IP, а host-wildcard'ом единственный порт не ограничить, так
+      что схема — самая узкая гарантированно рабочая политика.
+      Это сознательное ослабление ТОЛЬКО connect-src и ТОЛЬКО в cordova/capacitor —
+      обычная сборка для браузера так же прибита к localhost:8787, как и раньше.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:8787<% if (ctx.mode.cordova || ctx.mode.capacitor) { %> http://192.168.1.114:8787<% } %><% if (ctx.dev) { %> ws://localhost:*<% } %>; worker-src 'self' blob:;"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:8787<% if (ctx.mode.cordova || ctx.mode.capacitor) { %> http:<% } %><% if (ctx.dev) { %> ws://localhost:*<% } %>; worker-src 'self' blob:;"
     />
 
     <link rel="icon" type="image/png" sizes="128x128" href="icons/favicon-128x128.png">

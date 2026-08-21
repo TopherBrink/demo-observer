@@ -51,18 +51,54 @@ export function resetFlags() {
   Object.assign(flags, DEFAULTS)
 }
 
-export const config = {
+const ENDPOINTS_KEY = 'obs.endpoints'
+
+// То, что зашито в сборку (.env / .env.cordova на момент "quasar build").
+// Это именно ДЕФОЛТ для полей в панели докладчика — не единственный источник истины.
+const ENDPOINT_DEFAULTS = {
+  collectorUrl: import.meta.env?.VITE_COLLECTOR_URL || 'http://192.168.0.10:8787',
+  apiUrl: import.meta.env?.VITE_API_URL || 'http://192.168.0.10:8787',
+}
+
+function loadEndpoints() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(ENDPOINTS_KEY) || '{}')
+    return {
+      collectorUrl: saved.collectorUrl || ENDPOINT_DEFAULTS.collectorUrl,
+      apiUrl: saved.apiUrl || ENDPOINT_DEFAULTS.apiUrl,
+    }
+  } catch {
+    return { ...ENDPOINT_DEFAULTS }
+  }
+}
+
+export function resetEndpoints() {
+  config.collectorUrl = ENDPOINT_DEFAULTS.collectorUrl
+  config.apiUrl = ENDPOINT_DEFAULTS.apiUrl
+}
+
+export const config = reactive({
   // Куда шлём события. В Cordova это ВСЕГДА абсолютный URL:
   // страница живёт на https://localhost (cordova-android 10+) или на
   // capacitor://localhost / file:// — относительные пути укажут не туда.
-  collectorUrl: import.meta.env?.VITE_COLLECTOR_URL || 'http://192.168.0.10:8787',
-  apiUrl: import.meta.env?.VITE_API_URL || 'http://192.168.0.10:8787',
+  //
+  // По умолчанию — то, что зашили в сборку из .env.cordova. Но это редактируется
+  // прямо в панели докладчика (без пересборки!) на случай, если в месте показа
+  // сеть или IP окажутся другими, чем на момент сборки APK.
+  ...loadEndpoints(),
 
   release: import.meta.env?.VITE_RELEASE || 'demo@1.0.0',
 
   // Куда можно подмешивать traceparent. Чужим доменам — нельзя:
   // кастомный заголовок включит preflight и запрос упадёт по CORS.
-  traceTargets: [/^http:\/\/192\.168\./, /^https:\/\/api\./],
+  // Все стандартные приватные диапазоны — чтобы работало в любой сети показа,
+  // не только в той, что была на момент сборки.
+  traceTargets: [
+    /^http:\/\/192\.168\./,
+    /^http:\/\/10\./,
+    /^http:\/\/172\.(1[6-9]|2\d|3[01])\./,
+    /^https:\/\/api\./,
+  ],
 
   maxBodyChars: 4096, // обрезка тел запросов/ответов
   replayBufferMs: 60_000, // сколько секунд сессии держим в памяти
@@ -73,4 +109,15 @@ export const config = {
     'password', 'pass', 'token', 'access_token', 'refresh_token', 'authorization',
     'phone', 'email', 'card', 'cvv', 'pan', 'secret', 'session_id', 'passport',
   ],
-}
+})
+
+watch(
+  () => [config.collectorUrl, config.apiUrl],
+  ([collectorUrl, apiUrl]) => {
+    try {
+      localStorage.setItem(ENDPOINTS_KEY, JSON.stringify({ collectorUrl, apiUrl }))
+    } catch {
+      /* приватный режим — переживём */
+    }
+  },
+)
